@@ -9,20 +9,31 @@ import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
 import org.graphstream.graph.*;
+import org.graphstream.graph.implementations.MultiGraph;
 import org.graphstream.graph.implementations.SingleGraph;
+import org.graphstream.ui.*;
+import org.graphstream.ui.spriteManager.*;
+import org.graphstream.ui.view.Viewer;
 
 import com.google.gson.Gson;
 
 public class Main {
 	
+	public static SpriteManager spriteManager = null;
+	public static Graph graph = null;
+	
 	public static int ANIMATION_DELAY;
 	public static boolean ANIMATION_ENABLED;
 	public static boolean DEBUG_ENABLED;
-	public static boolean CHRONOLOGICAL;
-	public static String JSON_FILE_NAME;
+	public static boolean STYLES_ENABLED;
+	public static String MODE;
 	public static String JSON_FILE_PATH;
+	public static String STYLESHEET_PATH;
 
 	public static boolean CONFIG_DONE;
+	
+	//GROSS COUNTER TO BE REPLACED
+	static int nodeCount = 1;
 	
 	public static void main(String[] args) {
 	
@@ -39,10 +50,11 @@ public class Main {
 			
 			ANIMATION_DELAY = Integer.parseInt(config.getProperty("delay"));
 			ANIMATION_ENABLED = Boolean.parseBoolean(config.getProperty("animation"));
-			DEBUG_ENABLED = Boolean.parseBoolean(config.getProperty("debugs"));
-			CHRONOLOGICAL = Boolean.parseBoolean(config.getProperty("chronological"));
-			JSON_FILE_NAME = config.getProperty("JSONfilename");
-			JSON_FILE_PATH = config.getProperty("JSONfilepath");
+			DEBUG_ENABLED = Boolean.parseBoolean(config.getProperty("debug"));
+			MODE = config.getProperty("mode");
+			JSON_FILE_PATH = config.getProperty("JSONpath");
+			STYLES_ENABLED = Boolean.parseBoolean(config.getProperty("styles"));
+			STYLESHEET_PATH = config.getProperty("stylesheetPath");
 			
 			CONFIG_DONE = true; //Mark config operation complete
 			
@@ -51,7 +63,25 @@ public class Main {
 			e.printStackTrace();
 		}
 		
-		Graph graph = new SingleGraph("solution graph");
+		//Create Graph
+		graph = new SingleGraph("solution graph");
+		
+		//Enable Styling 
+		if (STYLES_ENABLED){
+			spriteManager = new SpriteManager(graph);
+			
+			//Verify the stylesheet can be found
+			try{
+				File stylesheet = new File ("D:/workspace/Eclipse Projects/visual-tcp1p/assets/tcp1p.css");
+				FileReader fr = new FileReader (stylesheet);
+			
+			}catch (IOException e){
+			
+				System.out.println("Error finding stylesheet!");
+			}
+			
+			//graph.addAttribute("ui.stylehseet", "url('D:/workspace/Eclipse Projects/visual-tcp1p/assets/tcp1p.css');");
+		} 
 		
 		String jsonData = getStringFromJSONFile();
 		
@@ -60,18 +90,23 @@ public class Main {
 		LinkChart linkChart = gson.fromJson(jsonData, LinkChart.class);
 		
 		//Debug Block
-		if (Boolean.parseBoolean(config.getProperty("debug"))){
+		if (DEBUG_ENABLED){
 			System.out.println("Extracted JSON data in POJO:");
 			System.out.println(linkChart);
 		}
 
-		if (CHRONOLOGICAL){
-			generateChronologicalGraph(graph,linkChart);
-		}else{
+		switch(MODE){
+		
+		case "Fast":	
 			generateFastGraph(graph,linkChart);
+			break;
+		case "Chronological":
+			generateChronologicalGraph(graph,linkChart);
+			break;
 		}
 		
 	}
+	
 	
 	public static void generateFastGraph(Graph graph, LinkChart data){
 		
@@ -84,9 +119,8 @@ public class Main {
 		
 		//Animation Block
 		if(ANIMATION_ENABLED){
-			graph.display();
+			renderGraph();
 		}
-
 	
 		try {
 		
@@ -94,36 +128,15 @@ public class Main {
 		for (GraphElement item: items){
 			
 			if (item.getType().equals("node")){
-				
-				if(DEBUG_ENABLED){
-					System.out.println(item);
-				}
-
-				graph.addNode(item.getId());
-			}
-			
-			if (ANIMATION_ENABLED){
-				TimeUnit.MILLISECONDS.sleep(ANIMATION_DELAY);
+				graph = addNode(graph, item);
 			}
 		}		
 		
 		//Create Edges
 		for (GraphElement item: items){	
-			
 			if (item.getType().equals("link")){
-				
-				if (DEBUG_ENABLED){
-					System.out.println(item);
-				}
-
-				graph.addEdge(item.getId(), Integer.toString(item.getId1()), Integer.toString(item.getId2()));
-			}
-		
-			//Animation delay block
-			if (ANIMATION_ENABLED){
-				TimeUnit.MILLISECONDS.sleep(ANIMATION_DELAY);
-			}
-			
+				graph = addLink(graph, item);
+			}	
 		}
 		
 		} catch (InterruptedException e) {
@@ -133,7 +146,7 @@ public class Main {
 		
 		//Animation Disabled Block
 		if (!ANIMATION_ENABLED){
-			graph.display();	
+			renderGraph();	
 		}
 	}
 	
@@ -145,36 +158,25 @@ public class Main {
 		}
 		
 		if (ANIMATION_ENABLED){
-			graph.display();
+			
+			renderGraph();
 		}
 		
 		ArrayList<GraphElement> items = data.getItems();
 		
 		try {
-
+			
+			//Iterate through graph elements
 			for (GraphElement item: items){	
 				
+				//If it's a node add a node to the graph
 				if (item.getType().equals("node")){
-					
-					if (DEBUG_ENABLED){
-						System.out.println(item);
-					}
-
-					graph.addNode(item.getId());
+					graph = addNode(graph, item);
 				}
 				
+				//If it's a link add an edge to the graph
 				if (item.getType().equals("link")){
-					
-					if (DEBUG_ENABLED){
-						System.out.println(item);
-					}
-
-					graph.addEdge(item.getId(), Integer.toString(item.getId1()), Integer.toString(item.getId2()));
-				}
-			
-				//Animation delay block
-				if (ANIMATION_ENABLED){
-					TimeUnit.MILLISECONDS.sleep(ANIMATION_DELAY);
+					graph = addLink(graph, item);
 				}
 				
 			}
@@ -186,7 +188,7 @@ public class Main {
 		
 		//Animation Disabled Block
 		if (!ANIMATION_ENABLED){
-			graph.display();	
+			renderGraph();	
 		}
 	}
 	
@@ -201,9 +203,8 @@ public class Main {
 		
 		//Read input JSON file
 		try{
-				String filepath = JSON_FILE_PATH + JSON_FILE_NAME;
 				
-				File json = new File (filepath);
+				File json = new File (JSON_FILE_PATH);
 				FileReader reader = new FileReader (json);
 				BufferedReader bufferedReader = new BufferedReader (reader);
 				
@@ -225,6 +226,54 @@ public class Main {
 				}
 		
 		return jsonData;
+	}
+	
+	
+	private static Graph addNode (Graph graph, GraphElement element) throws InterruptedException{
+		
+		if(DEBUG_ENABLED){
+			System.out.println("Added Node: " + element);
+		}
+		
+		graph.addNode(element.getId());
+		
+		if(STYLES_ENABLED){
+			
+		}
+		
+		
+		if (ANIMATION_ENABLED){
+			TimeUnit.MILLISECONDS.sleep(ANIMATION_DELAY);
+		}
+		
+		return graph;
+	}
+	
+	private static Graph addLink (Graph graph, GraphElement element) throws InterruptedException{
+		
+		if (DEBUG_ENABLED){
+			System.out.println("Added Link: " + element);
+		}
+		
+		graph.addEdge(element.getId(), Integer.toString(element.getId1()), Integer.toString(element.getId2()));
+		
+		if (ANIMATION_ENABLED){
+			TimeUnit.MILLISECONDS.sleep(ANIMATION_DELAY);
+		}
+		
+		return graph;
+	}
+	
+	//Renders the graph with appropriate styles if applicable
+	private  static void renderGraph(){
+		
+		if (STYLES_ENABLED){
+			System.setProperty("org.graphstream.ui.renderer",
+	                "org.graphstream.ui.j2dviewer.J2DGraphRenderer");
+			graph.addAttribute("ui.stylesheet", "url('" + STYLESHEET_PATH + "');");
+		}
+
+		graph.display();
 	}
 
 }

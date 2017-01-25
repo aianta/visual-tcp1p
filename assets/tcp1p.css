@@ -1,0 +1,18 @@
+node {
+	size: 30px, 30px;
+	shape: circle;
+	fill-color: #41B2AA;
+	stroke-mode: plain;
+	stroke-color: #2A7772;
+	stroke-width: 3px;
+	
+}
+
+edge {
+	shape: blob;
+	size: 5;
+}
+
+node:clicked {
+	fill-color: red;
+}
